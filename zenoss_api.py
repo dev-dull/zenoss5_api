@@ -641,75 +641,8 @@ def main():
     fin.close()
     zap = ZenossAPI(credentials)
 
-    # zap.add_template('AlastairUptime', '/zport/dmd/Devices/Server/Linux')
-    # zap.get_data_source_types()
-    # zap.add_data_source('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime', 'AlastairUptimeDS2')
-    # zap.set_template_info('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime/datasources/AlastairUptimeDS', **{'oid':'1.3.6.1.2.1.25.1.1.0'})
-    # zap.get_template_info('/zport/dmd/Devices/Server/Linux/rrdTemplates/SystemUptime/datasources/uptime')
-    # zap.get_data_source_details('/zport/dmd/Devices/Server/Linux/rrdTemplates/SystemUptime')  # ???
-
-    # zap.get_data_sources('/zport/dmd/Devices/Server/Linux/rrdTemplates/Device/datasources/SystemUptime')
-    # |_  /zport/dmd/Devices/Server/Linux/rrdTemplates/SystemUptime/datasources/uptime
-    # zap.get_data_source_details('/zport/dmd/Devices/Server/Linux/rrdTemplates/SystemUptime/datasources/uptime')
-    # zap.get_data_source_details('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime/datasources/AlastairUptimeDS')
-
-    # zap.get_data_sources('/zport/dmd/Devices/Server/Linux/rrdTemplates/Device/datasources/AlastairUptime')
-
-    # zap.add_threshold('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime', C.API_THRESHOLD_MIN_MAX,
-    #                   '2_YEAR_UPTIME',
-    #                   ['/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime/datasources/AlastairUptimeDS/datapoints/AlastairUptimeDS'])
-    # zap.add_graph_definition('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime',
-    #                          'AUptime')
-    # zap.add_data_point_to_graph('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime/datasources/AlastairUptimeDS/datapoints/AlastairUptimeDS',
-    #                             '/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime/graphDefs/AUptime', include_thresholds=True)
-    # zap.set_template_info(
-    #      '/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime/graphDefs/AUptime/graphPoints/AlastairUptimeDS',
-    #      **{C.API_LINE_TYPE: C.API_LINE_TYPE_LINE, C.API_RPN: '8640000,/'})
-    # zap.set_graph_definition('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime/graphDefs/AUptime',
-    #                          miny=0, maxy=730, units='Days')
-    #
-    # zap.bind_or_unbind_template('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws01.postdirect.com',
-    #                             '/zport/dmd/Devices/Server/Linux/rrdTemplates/SystemUptime')
-
-    # zap.get_device_info('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime')
-
-    # zap.add_local_template('/zport/dmd/Devices/Server/Linux/',
-    #                        '/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime')
-    # zap.get_local_templates('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws01.postdirect.com')
-    # zap.set_bound_templates('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws01.postdirect.com',
-    #                         ['Device', 'SystemUptime', 'AlastairUptime'])
-
-    # for tid in ['/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime',
-    #             '/zport/dmd/Devices/Server/Linux/rrdTemplates/SystemUptime']:
-    #     zap.bind_or_unbind_template('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws01.postdirect.com', tid)
-    #     zap.bind_or_unbind_template('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws02.postdirect.com', tid)
-
-    # zap.get_bound_templates('/zport/dmd/Devices/Server/Linux')
-    # print zap.bind_templates('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws01.postdirect.com', ['AlastairUptime', 'SystemUptime', 'AlastairUptimeAUTO'])
-    # zap.get_bound_templates('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws02.postdirect.com')
-    #
-    zap.add_new_snmp_monitor('AlastairUptimeAUTO', '/zport/dmd/Devices/Server/Linux', oid='1.3.6.1.2.1.25.1.1.0',
+    zap.add_new_snmp_monitor('UptimeAUTO', '/zport/dmd/Devices/Server/Linux', oid='1.3.6.1.2.1.25.1.1.0',
                              threshold_max=730, graph_max_y=735, graph_units='Days', RPN='8640000,/', overwrite=True)
-    # zap.get_data_sources('/zport/dmd/Devices/Network/BIG-IP/rrdTemplates/BigIpDevice')
-    # zap.get_data_points('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptimeAUTO')
-    # zap.get_thresholds('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptimeAUTO')
-    # zap.get_graphs('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptimeAUTO')
-    # zap.get_data_points('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptimeAUTO')
-    # zap.get_graph_definition('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptimeAUTO/graphDefs/AlastairUptimeAUTO_graphDefs')
-    # zap.get_data_point_details('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptimeAUTO/datasources/AlastairUptimeAUTO_datasources/datapoints/AlastairUptimeAUTO_datasources')
-    # zap.get_data_source_details('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptimeAUTO/datasources/AlastairUptimeAUTO_datasources')
-    # zap.get_graph_points('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptimeAUTO/graphDefs/AlastairUptimeAUTO_graphDefs')
-
-
-
-    # getDataPoints:
-    # '/zport/dmd/Devices/Server/Linux/rrdTemplates/Device/datasources/SystemUptime'
-
-    # zap.get_templates()
-    # zap.add_linux_host('etestv-joshui01.postdirect.com', **{C.API_SNMP_COMMUNITY: 'qyjy8aka'})
-    # zap.add_linux_host('etestv-ald')
-    # zap.add_linux_host('eprov-legacyws02.postdirect.com')
-    # zap.get_templates('/zport/dmd/Devices/Server/Linux/rrdTemplates')
 
 if __name__ == "__main__":
     main()
