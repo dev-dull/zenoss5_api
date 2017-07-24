@@ -25,7 +25,11 @@ class C(object):
     ERROR_CREDENTIALS_STR_FORMAT = None
     ERROR_CREDENTIALS_UNKNOWN_FORMAT = None
     ERROR_INVALID_HOSTNAME_GOT_S = None
-    # ERROR_INVALID_PORT_GOT_S = None
+
+    ERROR_EXPECTED_S_GOT_S = None
+
+    ERROR_API_S_UNSUCCESSFUL_GOT_S = None
+    ERROR_VALUES_S_NO_MATCH_S = None
 
     API_URI = None
     API_ENDPOINT = None
@@ -200,6 +204,7 @@ class C(object):
     API_METHOD_GET_GRAPHS = None
     API_METHOD_GET_GRAPH_DEFINITION = None
     API_METHOD_GET_GRAPH_POINTS = None
+    API_METHOD_DELETE_TEMPLATE = None
 
     # - Mib
     API_METHOD_ADD_OID_MAPPING = None
@@ -297,10 +302,12 @@ C.ERROR_CREDENTIALS_STR_FORMAT = 'The supplied credentials are in a string, but 
 C.ERROR_CREDENTIALS_UNKNOWN_FORMAT = 'The supplied credentials are in an unknown format. Expected list, tuple, str, or'\
                                      ' dict.'  # "now you done gone and fucked up.
 
-# C.ERROR_INVALID_PORT_GOT_S = 'Port number must be a numerical value. Got: %s'
 C.ERROR_INVALID_HOSTNAME_GOT_S = 'Hostname could not be resolved to an IP. Check for typos and try the FQDN. Got: %s'
 
 C.ERROR_EXPECTED_S_GOT_S = 'Expected type %s. Got type %s.'
+
+C.ERROR_API_S_UNSUCCESSFUL_GOT_S = 'API call returned with "successful" state of %s.'
+C.ERROR_VALUES_S_NO_MATCH_S = 'Values %s had no match in key %s.'
 
 C.API_URI = 'https://{HOST}'.format(HOST=C.API_URI_HOST+C.API_URI_DOMAIN)
 C.API_ENDPOINT = '/zport/dmd'
@@ -504,6 +511,7 @@ C.API_METHOD_GET_THRESHOLDS = 'getThresholds'
 C.API_METHOD_GET_GRAPHS = 'getGraphs'
 C.API_METHOD_GET_GRAPH_DEFINITION = 'getGraphDefinition'
 C.API_METHOD_GET_GRAPH_POINTS = 'getGraphPoints'
+C.API_METHOD_DELETE_TEMPLATE = 'deleteTemplate'
 
 # - Mib
 C.API_METHOD_ADD_OID_MAPPING = 'addOidMapping'

@@ -88,14 +88,16 @@ class ZenossAPI(object):
             raise ZenossError()  # TODO: Error message
         return None, None
 
-    def api_request(self, endpoint, action, method, data=[{}], headers=C.HEADER_JSON, raise_exception=False):
+    def api_request(self, endpoint, action, method, data=[{}], headers=C.HEADER_JSON, raise_json_exception=False,
+                    validate_success=False):
         """
         :param endpoint: String, e.g. C.API_ROUTER_DEVICE_ENDPOINT - 'device_router'
         :param action: String, e.g. C.API_ACTION_DEVICE_ROUTER - 'DeviceRouter'
         :param method: String, e.g. C.API_METHOD_GET_DEVICES - 'getDevices'
         :param data: List of dicts, The values that the 'method' takes
         :param headers: Dict, It's here if you need to set something other than a json content type or add something extra.
-        :param raise_exception: Boolean, when true, raise an error if the json from the API is incorrectly formatted.
+        :param raise_json_exception: Boolean, when true, raise an error if the json from the API is incorrectly formatted.
+        :param validate_success: Boolean, when true, will check if the Zenoss API returned 'success=true' in the JSON response.
         :return: When zenoss responds with status code 200: the unpacked json object (e.g. list, dict)
                  When zenoss responds with any other status code, a tuple (status_code, raw_text)
         """
@@ -118,7 +120,12 @@ class ZenossAPI(object):
 
             # TODO: we should be checking the status code and react+log accordingly.
             if r.status_code == 200:
-                return self._load_json(r.text, raise_exception=raise_exception)
+                results = self._load_json(r.text, raise_exception=raise_json_exception)
+                if validate_success and C.API_RESULT in results and C.API_SUCCESS in results[C.API_RESULT]:
+                    if results[C.API_RESULT][C.API_SUCCESS]:
+                        return results
+                    raise ZenossError('')  # TODO: error message from API.
+                return results
             else:
                 return r.status_code, r.text
         except requests.exceptions.ConnectionError as e:
@@ -128,17 +135,19 @@ class ZenossAPI(object):
     ####################################################################################################################
     #  DEVICE functions
     ####################################################################################################################
-    def get_devices(self):
+    def get_devices(self, validate_success=False):
         """
+        :param validate_success:
         :return:
         """
-        r = self.api_request(C.API_ROUTER_DEVICE_ENDPOINT, C.API_ACTION_DEVICE_ROUTER, C.API_METHOD_GET_DEVICES)
-        return self._load_json(r.text)
+        return self.api_request(C.API_ROUTER_DEVICE_ENDPOINT, C.API_ACTION_DEVICE_ROUTER,
+                                C.API_METHOD_GET_DEVICES, validate_success=validate_success)
 
-    def add_device(self, hostname, device_class, **kwargs):
+    def add_device(self, hostname, device_class, validate_success=False, **kwargs):
         """
         :param hostname:
         :param device_class:
+        :param validate_success:
         :param kwargs:
         :return:
         """
@@ -162,24 +171,27 @@ class ZenossAPI(object):
 
         payload.update(kwargs)
         return self.api_request(C.API_ROUTER_DEVICE_ENDPOINT, C.API_ACTION_DEVICE_ROUTER,
-                                C.API_METHOD_ADD_DEVICE, data=[payload])
+                                C.API_METHOD_ADD_DEVICE, data=[payload], validate_success=validate_success)
 
-    def bind_or_unbind_template(self, uid, template_uid):
+    def bind_or_unbind_template(self, uid, template_uid, validate_success=False):
         """
         :param uid:
         :param template_uid:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_UID: uid, C.API_TEMPLATE_UID: template_uid}]
         return self.api_request(C.API_ROUTER_DEVICE_ENDPOINT, C.API_ACTION_DEVICE_ROUTER,
-                                C.API_METHOD_BIND_OR_UNBIND_TEMPLATE, data=payload)
+                                C.API_METHOD_BIND_OR_UNBIND_TEMPLATE, data=payload, validate_success=validate_success)
 
-    def get_device_info(self, uid, keys=None):
+    def get_device_info(self, uid, keys=None, validate_success=False):
         """
         :param uid:
         :param keys:
+        :param validate_success:
         :return:
         """
+        # TODO: Should we be using self._non_str_iterable() here?
         if isinstance(keys, str):
             raise ZenossError()  # TODO: error string
         elif isinstance(keys, Iterable):
@@ -188,302 +200,342 @@ class ZenossAPI(object):
             keys = None
         payload = [{C.API_UID: uid, C.API_KEYS: keys}]
         return self.api_request(C.API_ROUTER_DEVICE_ENDPOINT, C.API_ACTION_DEVICE_ROUTER,
-                                C.API_METHOD_GET_INFO, data=payload)
+                                C.API_METHOD_GET_INFO, data=payload, validate_success=validate_success)
 
-    def get_bound_templates(self, uid):
+    def get_bound_templates(self, uid, validate_success=False):
         """
         :param uid:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_UID: uid}]
         return self.api_request(C.API_ROUTER_DEVICE_ENDPOINT, C.API_ACTION_DEVICE_ROUTER,
-                                C.API_METHOD_GET_BOUND_TEMPLATES, data=payload)
+                                C.API_METHOD_GET_BOUND_TEMPLATES, data=payload, validate_success=validate_success)
 
-    def get_unbound_templates(self, uid):
+    def get_unbound_templates(self, uid, validate_success=False):
         """
         :param uid:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_UID: uid}]
         return self.api_request(C.API_ROUTER_DEVICE_ENDPOINT, C.API_ACTION_DEVICE_ROUTER,
-                                C.API_METHOD_GET_UNBOUND_TEMPLATES, data=payload)
+                                C.API_METHOD_GET_UNBOUND_TEMPLATES, data=payload, validate_success=validate_success)
 
-    def add_local_template(self, device_uid, template_id):
+    def add_local_template(self, device_uid, template_id, validate_success=False):
         """
         :param device_uid:
         :param template_id:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_DEVICE_UID: device_uid, C.API_TEMPLATE_ID: template_id}]
         return self.api_request(C.API_ROUTER_DEVICE_ENDPOINT, C.API_ACTION_DEVICE_ROUTER,
-                                C.API_METHOD_ADD_LOCAL_TEMPLATE, data=payload)
+                                C.API_METHOD_ADD_LOCAL_TEMPLATE, data=payload, validate_success=validate_success)
 
-    def remove_local_template(self, device_uid, template_uid):
+    def remove_local_template(self, device_uid, template_uid, validate_success=False):
         """
         :param device_uid:
         :param template_uid:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_DEVICE_UID: device_uid, C.API_TEMPLATE_UID: template_uid}]
         return self.api_request(C.API_ROUTER_DEVICE_ENDPOINT, C.API_ACTION_DEVICE_ROUTER,
-                                C.API_METHOD_REMOVE_LOCAL_TEMPLATE, data=payload)
+                                C.API_METHOD_REMOVE_LOCAL_TEMPLATE, data=payload, validate_success=validate_success)
 
-    def get_local_templates(self, uid, query=None):
+    def get_local_templates(self, uid, query=None, validate_success=False):
         """
         :param uid:
-        :param query: Unused
+        :param query:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_UID: uid, C.API_QUERY: query}]
         return self.api_request(C.API_ROUTER_DEVICE_ENDPOINT, C.API_ACTION_DEVICE_ROUTER,
-                                C.API_METHOD_GET_LOCAL_TEMPLATES, data=payload)
+                                C.API_METHOD_GET_LOCAL_TEMPLATES, data=payload, validate_success=validate_success)
 
-    def set_bound_templates(self, uid, template_ids):
+    def set_bound_templates(self, uid, template_ids, validate_success=False):
         """
         :param uid:
         :param template_ids:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_UID: uid, C.API_TEMPLATE_IDS: self._non_str_iterable(template_ids)}]
         return self.api_request(C.API_ROUTER_DEVICE_ENDPOINT, C.API_ACTION_DEVICE_ROUTER,
-                                C.API_METHOD_SET_BOUND_TEMPLATES, data=payload)
+                                C.API_METHOD_SET_BOUND_TEMPLATES, data=payload, validate_success=validate_success)
 
     ####################################################################################################################
     #  TEMPLATE functions
     ####################################################################################################################
-    def add_template(self, zid, target_uid):
+    def add_template(self, zid, target_uid, validate_success=False):
         """
         :param zid: The name to give the template.
         :param target_uid: The device path the template should apply to (e.g. /Server/Linux)
+        :param validate_success: Validate that the API returned 'success=true' in the response.
         :return: When zenoss responds with status code 200: the unpacked json object (e.g. list, dict)
                  When zenoss responds with any other status code, a tuple (status_code, raw_text)
         """
         payload = [{C.API_ID: zid, C.API_TARGET_UID: target_uid}]
 
         return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
-                                C.API_METHOD_ADD_TEMPLATE, data=payload)
+                                C.API_METHOD_ADD_TEMPLATE, data=payload, validate_success=validate_success)
 
-    def get_templates(self, zid=''):
+    def get_templates(self, zid='', validate_success=False):
         """
         :param zid: String: not used. Exists to mirror Zenoss API and to support any future implementation.
+        :param validate_success: Boolean, Validate that the API returned 'success=true' in the response.
         :return:
         """
         payload = [{C.API_ID: zid}]
         return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
-                                C.API_METHOD_GET_TEMPLATES, data=payload)
+                                C.API_METHOD_GET_TEMPLATES, data=payload, validate_success=validate_success)
 
-    def add_data_source(self, template_uid, name, data_source_type=C.API_DATA_SOURCE_TYPE_SNMP):
+    def add_data_source(self, template_uid, name, data_source_type=C.API_DATA_SOURCE_TYPE_SNMP, validate_success=False):
         """
         :param template_uid:
         :param name:
         :param data_source_type:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_TEMPLATE_UID: template_uid, C.API_NAME: name, C.API_TYPE: data_source_type}]
         return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
-                                C.API_METHOD_ADD_DATA_SOURCE, data=payload)
+                                C.API_METHOD_ADD_DATA_SOURCE, data=payload, validate_success=validate_success)
 
-    def get_data_sources(self, uid):
+    def get_data_sources(self, uid, validate_success=False):
         """
         :param uid:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_UID: uid}]
         return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
-                                C.API_METHOD_GET_DATA_SOURCES, data=payload)
+                                C.API_METHOD_GET_DATA_SOURCES, data=payload, validate_success=validate_success)
 
-    def get_data_source_details(self, uid):
+    def get_data_source_details(self, uid, validate_success=False):
         """
         :param uid:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_UID: uid}]
         return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
-                                C.API_METHOD_GET_DATA_SOURCE_DETAILS, data=payload)
+                                C.API_METHOD_GET_DATA_SOURCE_DETAILS, data=payload, validate_success=validate_success)
 
-    def get_data_source_types(self, query=None):
+    def get_data_source_types(self, query=None, validate_success=False):
         """
-        :param query: Unused, according to the API docs. Still required for the query, however.
-               Including for forward-compatibility.
+        :param query:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_QUERY: query or C.API_KEYWORD_DEFAULTS[C.API_QUERY]}]
         return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
-                                C.API_METHOD_GET_DATA_SOURCE_TYPES, data=payload)
+                                C.API_METHOD_GET_DATA_SOURCE_TYPES, data=payload, validate_success=validate_success)
 
-    def add_data_point(self, data_source_uid, name):
+    def add_data_point(self, data_source_uid, name, validate_success=False):
         """
         :param data_source_uid:
         :param name:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_DATA_SOURCE_UID: data_source_uid, C.API_NAME: name}]
         return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
-                                C.API_METHOD_ADD_DATA_POINT, data=payload)
+                                C.API_METHOD_ADD_DATA_POINT, data=payload, validate_success=validate_success)
 
-    def get_data_points(self, uid, query=C.API_KEYWORD_DEFAULTS[C.API_QUERY]):
+    def get_data_points(self, uid, query=C.API_KEYWORD_DEFAULTS[C.API_QUERY], validate_success=False):
         """
         :param uid:
         :param query:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_UID: uid, C.API_QUERY: query}]
         return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
-                                C.API_METHOD_GET_DATA_POINTS, data=payload)
+                                C.API_METHOD_GET_DATA_POINTS, data=payload, validate_success=validate_success)
 
-    def add_graph_definition(self, template_uid, graph_definition_id):
+    def add_graph_definition(self, template_uid, graph_definition_id, validate_success=False):
         """
         :param template_uid:
         :param graph_definition_id:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_TEMPLATE_UID: template_uid, C.API_GRAPH_DEFINITION_ID: graph_definition_id}]
         return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
-                                C.API_METHOD_ADD_GRAPH_DEFINITION, data=payload)
+                                C.API_METHOD_ADD_GRAPH_DEFINITION, data=payload, validate_success=validate_success)
 
     def add_data_point_to_graph(self, data_point_uid, graph_uid,
-                                include_thresholds=C.API_KEYWORD_DEFAULTS[C.API_INCLUDE_THRESHOLDS]):
+                                include_thresholds=C.API_KEYWORD_DEFAULTS[C.API_INCLUDE_THRESHOLDS],
+                                validate_success=False):
         """
         :param data_point_uid:
         :param graph_uid:
         :param include_thresholds:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_DATA_POINT_UID: data_point_uid, C.API_GRAPH_UID: graph_uid,
                     C.API_INCLUDE_THRESHOLDS: include_thresholds}]
         return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
-                                C.API_METHOD_ADD_DATA_POINT_TO_GRAPH, data=payload)
+                                C.API_METHOD_ADD_DATA_POINT_TO_GRAPH, data=payload, validate_success=validate_success)
 
     def set_graph_definition(self, uid, miny=C.API_KEYWORD_DEFAULTS[C.API_MINY],
-                             maxy=C.API_KEYWORD_DEFAULTS[C.API_MAXY], units='', **kwargs):
+                             maxy=C.API_KEYWORD_DEFAULTS[C.API_MAXY], units='', validate_success=False, **kwargs):
         """
         :param uid:
         :param miny:
         :param maxy:
         :param units:
+        :param validate_success:
         :param kwargs:
         :return:
         """
         kwargs.update({C.API_UID: uid, C.API_MINY: miny, C.API_MAXY: maxy, C.API_UNITS: units})
         payload = [kwargs]
         return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
-                                C.API_METHOD_SET_GRAPH_DEFINITION, data=payload)
+                                C.API_METHOD_SET_GRAPH_DEFINITION, data=payload, validate_success=validate_success)
 
-    def get_template_info(self, uid):
+    def get_template_info(self, uid, validate_success=False):
         """
         :param uid:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_UID: uid}]
-        self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
-                         C.API_METHOD_GET_INFO, data=payload)
+        return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
+                         C.API_METHOD_GET_INFO, data=payload, validate_success=validate_success)
 
-    def set_template_info(self, uid, **kwargs):
+    def set_template_info(self, uid, validate_success=False, **kwargs):
         """
         :param uid:
+        :param validate_success:
         :param kwargs:
         :return:
         """
         kwargs.update({C.API_UID: uid})
         payload = [kwargs]
-        self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
-                         C.API_METHOD_SET_INFO, data=payload)
+        return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
+                         C.API_METHOD_SET_INFO, data=payload, validate_success=validate_success)
 
-    def get_threshold_types(self, query=C.API_KEYWORD_DEFAULTS[C.API_QUERY]):
+    def get_threshold_types(self, query=C.API_KEYWORD_DEFAULTS[C.API_QUERY], validate_success=False):
         """
         :param query:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_QUERY: query}]
         return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
-                                C.API_METHOD_GET_THRESHOLD_TYPES, data=payload)
+                                C.API_METHOD_GET_THRESHOLD_TYPES, data=payload, validate_success=validate_success)
 
-    def add_threshold(self, uid, threshold_type, threshold_id, data_points):
+    def add_threshold(self, uid, threshold_type, threshold_id, data_points, validate_success=False):
         """
         :param uid:
-        :param threshold_id:
         :param threshold_type:
+        :param threshold_id:
         :param data_points:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_UID: uid, C.API_THRESHOLD_ID: threshold_id, C.API_THRESHOLD_TYPE: threshold_type,
                     C.API_DATA_POINTS: data_points}]
         return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
-                                C.API_METHOD_ADD_THRESHOLD, data=payload)
+                                C.API_METHOD_ADD_THRESHOLD, data=payload, validate_success=validate_success)
 
-    def get_threshold_details(self, uid):
+    def get_threshold_details(self, uid, validate_success=False):
         """
         :param uid:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_UID: uid}]
         return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
-                                C.API_METHOD_GET_THRESHOLD_DETAILS, data=payload)
+                                C.API_METHOD_GET_THRESHOLD_DETAILS, data=payload, validate_success=validate_success)
 
-    def get_data_point_details(self, uid):
+    def get_data_point_details(self, uid, validate_success=False):
         """
         :param uid:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_UID: uid}]
         return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
-                                C.API_METHOD_GET_DATA_POINT_DETAILS, data=payload)
+                                C.API_METHOD_GET_DATA_POINT_DETAILS, data=payload, validate_success=validate_success)
 
-    def get_thresholds(self, uid, query=C.API_KEYWORD_DEFAULTS[C.API_QUERY]):
+    def get_thresholds(self, uid, query=C.API_KEYWORD_DEFAULTS[C.API_QUERY], validate_success=False):
         """
         :param uid:
         :param query:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_UID: uid, C.API_QUERY: query}]
         return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
-                                C.API_METHOD_GET_THRESHOLDS, data=payload)
+                                C.API_METHOD_GET_THRESHOLDS, data=payload, validate_success=validate_success)
 
-    def get_graphs(self, uid, query=C.API_KEYWORD_DEFAULTS[C.API_QUERY]):
+    def get_graphs(self, uid, query=C.API_KEYWORD_DEFAULTS[C.API_QUERY], validate_success=False):
         """
         :param uid:
         :param query:
+        :param validate_success: UNUSED: The API response does not include a 'success' value for this function!!!
         :return:
         """
         payload = [{C.API_UID: uid, C.API_QUERY: query}]
         return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
-                                C.API_METHOD_GET_GRAPHS, data=payload)
+                                C.API_METHOD_GET_GRAPHS, data=payload, validate_success=False)
 
-    def get_graph_definition(self, uid):
+    def get_graph_definition(self, uid, validate_success=False):
         """
         :param uid:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_UID: uid}]
         return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
-                                C.API_METHOD_GET_GRAPH_DEFINITION, data=payload)
+                                C.API_METHOD_GET_GRAPH_DEFINITION, data=payload, validate_success=validate_success)
 
-    def get_graph_points(self, uid):
+    def get_graph_points(self, uid, validate_success=False):
         """
         :param uid:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_UID: uid}]
         return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
-                                C.API_METHOD_GET_GRAPH_POINTS, data=payload)
+                                C.API_METHOD_GET_GRAPH_POINTS, data=payload, validate_success=validate_success)
+
+    def delete_template(self, uid, validate_success=False):
+        """
+        :param uid:
+        :param validate_success:
+        :return:
+        """
+        payload = [{C.API_UID: uid}]
+        return self.api_request(C.API_ROUTER_TEMPLATE_ENDPOINT, C.API_ACTION_TEMPLATE_ROUTER,
+                                C.API_METHOD_DELETE_TEMPLATE, data=payload, validate_success=validate_success)
 
     ####################################################################################################################
     #  MIB functions
     ####################################################################################################################
-    def add_oid_mapping(self, uid, zid, oid, node_type=C.API_KEYWORD_DEFAULTS[C.API_NODE_TYPE]):
+    def add_oid_mapping(self, uid, zid, oid, node_type=C.API_KEYWORD_DEFAULTS[C.API_NODE_TYPE], validate_success=False):
         """
         :param uid:
         :param zid:
         :param oid:
         :param node_type:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_UID: uid, C.API_ID: zid, C.API_OID: oid, C.API_NODE_TYPE: node_type}]
-        self.api_request(C.API_ROUTER_MIB_ENDPOINT, C.API_ACTION_MIB_ROUTER, C.API_METHOD_ADD_OID_MAPPING, data=payload)
+        return self.api_request(C.API_ROUTER_MIB_ENDPOINT, C.API_ACTION_MIB_ROUTER, C.API_METHOD_ADD_OID_MAPPING,
+                                data=payload, validate_success=validate_success)
 
     def get_oid_mappings(self, uid, direction=C.API_KEYWORD_DEFAULTS[C.API_DIR],
                          sort=C.API_KEYWORD_DEFAULTS[C.API_SORT], start=C.API_KEYWORD_DEFAULTS[C.API_START],
-                         page=C.API_KEYWORD_DEFAULTS[C.API_PAGE], limit=C.API_KEYWORD_DEFAULTS[C.API_LIMIT]):
+                         page=C.API_KEYWORD_DEFAULTS[C.API_PAGE], limit=C.API_KEYWORD_DEFAULTS[C.API_LIMIT],
+                         validate_success=False):
         """
         :param uid:
         :param direction:
@@ -491,6 +543,7 @@ class ZenossAPI(object):
         :param start:
         :param page:
         :param limit:
+        :param validate_success:
         :return:
         """
         payload = [{C.API_UID: uid,
@@ -499,106 +552,123 @@ class ZenossAPI(object):
                     C.API_START: start,
                     C.API_PAGE: page,
                     C.API_LIMIT: limit}]
-        self.api_request(C.API_ROUTER_MIB_ENDPOINT, C.API_ACTION_MIB_ROUTER, C.API_METHOD_GET_OID_MAPPINGS,
-                         data=payload)
+        return self.api_request(C.API_ROUTER_MIB_ENDPOINT, C.API_ACTION_MIB_ROUTER, C.API_METHOD_GET_OID_MAPPINGS,
+                         data=payload, validate_success=validate_success)
 
     ####################################################################################################################
     #  Convenience functions
     ####################################################################################################################
+    def _payload_filter(self, d):
+        # Zenoss alerting behavior is sometimes conditional on what is and is not set. This filter prevents us from
+        # setting values that have a blank value.
+        return dict(filter(lambda (x, v): v is not None, d.items()))
+
+    def _path_validator(self, data, key, checks, values):
+        for d in data:
+            if key in d:
+                path_parts = d[key].split('/')
+                for k, v in checks.items():
+                    func = getattr(path_parts[k], v)
+                    if not func(values[k]):
+                        break
+                else:
+                    # This else statement only happens when we didn't hit the 'break' statement (the loop
+                    # completed and therefore, we found our match)
+                    return d[key]
+        # This 'else' belongs to the 'for' loop
+        else:
+            raise ZenossError(C.ERROR_VALUES_S_NO_MATCH_S % (values.values(), key))
+
     def add_new_snmp_monitor(self, zid, target_uid, oid='', threshold_max=None, threshold_min=None,
                              template_type=C.API_TEMPLATE_TYPE_RRD_TEMPLATES, graph=True, graph_min_y=-1,
                              graph_max_y=-1, graph_units='', graph_line_type=C.API_LINE_TYPE_LINE, RPN=None,
-                             overwrite=False):
+                             overwrite=False, delete_on_fail=True):
 
-        # Zenoss alerting behavior is sometimes conditional on what is and is not set. This filter prevents us from
-        # setting values that have a blank value.
-        def _payload_filter(d):
-            return dict(filter(lambda (x, v): v is not None, d.items()))
-
-        def _path_validator(data, success, key, checks, values):
-            if success:
-                for d in data:
-                    if key in d:
-                        path_parts = d[key].split('/')
-                        for k,v in checks.items():
-                            func = getattr(path_parts[k], v)
-                            if not func(values[k]):
-                                break
-                        else:
-                            # This else statement only happens when we didn't hit the 'break' statement (the loop
-                            # completed and therefore, we found our match)
-                            return d[key]
-                else:
-                    raise ZenossError('')  # TODO: error message
+        # declare that this is a thing so if we fail immediately, the 'except' statement doesn't blow up.
+        template_uid = ''
 
         # If we already have the template and we don't want to overwrite it, simply return True.
-        results = self.get_templates(C.API_ENDPOINT+C.API_DEVICES)
-        for result in results[C.API_RESULT]:
-            if C.API_ID in result and result[C.API_ID] == zid and not overwrite:
-                return True
+        try:
+            if not overwrite:
+                results = self.get_templates(C.API_ENDPOINT+C.API_DEVICES)
+                # TODO: is this REALLY any better? (see commit ID 7da529ce79c496f3170664503b3e52bfb362e6d9 - lines 535-538)
+                try:
+                    if self._path_validator(results[C.API_RESULT], True, C.API_ID, {0: '__eq__'}, {0: zid}):
+                        # It exists and we don't want to overwrite it.
+                        return True
+                except ZenossError:
+                    # It didn't exist, so ignore the error and create it.
+                    pass
 
-        if not target_uid.startswith(C.API_ENDPOINT):
-            target_uid = C.API_ENDPOINT + target_uid
+            if not target_uid.startswith(C.API_ENDPOINT):
+                target_uid = C.API_ENDPOINT + target_uid
 
-        datasource_name = '%s_%s' % (zid, C.API_PATH_PART_DATA_SOURCES)
-        threshold_name = '%s_%s' % (zid, C.API_PATH_PART_THRESHOLDS)
-        graph_name = '%s_%s' % (zid, C.API_PATH_PART_GRAPH_DEFS)
+            datasource_name = '%s_%s' % (zid, C.API_PATH_PART_DATA_SOURCES)
+            threshold_name = '%s_%s' % (zid, C.API_PATH_PART_THRESHOLDS)
+            graph_name = '%s_%s' % (zid, C.API_PATH_PART_GRAPH_DEFS)
 
-        results = self.add_template(zid, target_uid)  # create template
-        data, success = self._get_result_data(results, data_key=C.API_NODE_CONFIG)
-        template_uid = ''  # This is just to keep the IDE from complaining.
-        if success:
-            template_uid = data[C.API_UID]
+            results = self.add_template(zid, target_uid, validate_success=True)  # create template
+            data, success = self._get_result_data(results, data_key=C.API_NODE_CONFIG)
+            template_uid = self._path_validator([data], C.API_UID, {-2: '__eq__', -1: '__eq__'},
+                                                {-2: C.API_TEMPLATE_TYPE_RRD_TEMPLATES[1:], -1: zid})
 
-        self.add_data_source(template_uid, datasource_name, data_source_type=C.API_DATA_SOURCE_TYPE_SNMP)
-        junk, success = self._get_result_data(results)
-        del junk
+            self.add_data_source(template_uid, datasource_name, data_source_type=C.API_DATA_SOURCE_TYPE_SNMP,
+                                 validate_success=True)
 
-        datasource_uid = ''  # This is just to keep the IDE from complaining.
-        if success:
-            results = self.get_data_sources(template_uid)
+            results = self.get_data_sources(template_uid, validate_success=True)
             data, success = self._get_result_data(results)
-            datasource_uid = _path_validator(data, success, C.API_UID, {-2: '__eq__', -1: '__eq__'},
-                                             {-2: C.API_PATH_PART_DATA_SOURCES, -1: datasource_name})
+            datasource_uid = self._path_validator(data, C.API_UID, {-2: '__eq__', -1: '__eq__'},
+                                                  {-2: C.API_PATH_PART_DATA_SOURCES, -1: datasource_name})
 
-        results = self.get_data_points(template_uid)
-        data, success = self._get_result_data(results)
-        # Yes, the last check here really should be the dataSOURCE name (not dataPOINT).
-        datapoint_uid = _path_validator(data, success, C.API_UID, {-2: '__eq__', -1: '__eq__'},
-                                        {-2: C.API_PATH_PART_DATA_POINTS, -1: datasource_name})
-
-
-        self.set_template_info(datasource_uid, **{C.API_OID: oid})
-        self.add_threshold(template_uid, C.API_THRESHOLD_MIN_MAX, threshold_name, [datapoint_uid])
-
-        results = self.get_thresholds(template_uid)
-        data, success = self._get_result_data(results)
-        threshold_uid = _path_validator(data, success, C.API_UID, {-2: '__eq__', -1: '__eq__'},
-                                        {-2: C.API_PATH_PART_THRESHOLDS, -1: threshold_name})
-
-        payload = _payload_filter({C.API_MAX_VAL: threshold_max, C.API_MIN_VAL: threshold_min})
-        if payload:
-            self.set_template_info(threshold_uid, **payload)
-
-        if graph:
-            self.add_graph_definition(template_uid, graph_name)  # create graph
-            results = self.get_graphs(template_uid)
-
-            # Note that the Zenoss is inconsistent here: No 'success' and no 'data' values returned from the API.
-            graph_uid = _path_validator(results[C.API_RESULT], True, C.API_UID, {-2: '__eq__', -1: '__eq__'},
-                                        {-2: C.API_PATH_PART_GRAPH_DEFS, -1: graph_name})
-
-            self.add_data_point_to_graph(datapoint_uid, graph_uid, include_thresholds=True)
-            results = self.get_graph_points(graph_uid)
+            results = self.get_data_points(template_uid, validate_success=True)
             data, success = self._get_result_data(results)
-            graph_point_datasource_uid = _path_validator(data, success, C.API_UID, {-2: '__eq__', -1: 'endswith'},
-                                                         {-2: C.API_PATH_PART_GRAPH_POINTS, -1: datasource_name})
+            # Yes, the last check here really should be the dataSOURCE name (not dataPOINT).
+            datapoint_uid = self._path_validator(data, C.API_UID, {-2: '__eq__', -1: '__eq__'},
+                                                 {-2: C.API_PATH_PART_DATA_POINTS, -1: datasource_name})
 
-            payload = _payload_filter({C.API_LINE_TYPE: graph_line_type, C.API_RPN: RPN})  # example RPN: '8640000,/'
+            self.set_template_info(datasource_uid, validate_success=True, **{C.API_OID: oid})
+
+            self.add_threshold(template_uid, C.API_THRESHOLD_MIN_MAX, threshold_name, [datapoint_uid],
+                               validate_success=True)
+
+            results = self.get_thresholds(template_uid, validate_success=True)
+            data, success = self._get_result_data(results)
+            threshold_uid = self._path_validator(data, C.API_UID, {-2: '__eq__', -1: '__eq__'},
+                                                 {-2: C.API_PATH_PART_THRESHOLDS, -1: threshold_name})
+
+            payload = self._payload_filter({C.API_MAX_VAL: threshold_max, C.API_MIN_VAL: threshold_min})
             if payload:
-                self.set_template_info(graph_point_datasource_uid, **payload)
-            self.set_graph_definition(graph_uid, miny=graph_min_y, maxy=graph_max_y, units=graph_units)
-        return self.bind_templates(target_uid, zid)
+                self.set_template_info(threshold_uid, validate_success=True, **payload)
+
+            if graph:
+                self.add_graph_definition(template_uid, graph_name, validate_success=True)  # create graph
+
+                # Note that the Zenoss is inconsistent here: No 'success' and no 'data' values returned from the API.
+                results = self.get_graphs(template_uid)
+                graph_uid = self._path_validator(results[C.API_RESULT], C.API_UID, {-2: '__eq__', -1: '__eq__'},
+                                            {-2: C.API_PATH_PART_GRAPH_DEFS, -1: graph_name})
+
+                self.add_data_point_to_graph(datapoint_uid, graph_uid, include_thresholds=True, validate_success=True)
+
+                results = self.get_graph_points(graph_uid, validate_success=True)
+                data, success = self._get_result_data(results)
+                graph_point_datasource_uid = self._path_validator(data, C.API_UID, {-2: '__eq__', -1: 'endswith'},
+                                                                  {-2: C.API_PATH_PART_GRAPH_POINTS, -1: datasource_name})
+
+                payload = self._payload_filter({C.API_LINE_TYPE: graph_line_type, C.API_RPN: RPN})  # example RPN '8640000,/'
+                if payload:
+                    self.set_template_info(graph_point_datasource_uid, validate_success=True, **payload)
+                results = self.set_graph_definition(graph_uid, miny=graph_min_y, maxy=graph_max_y, units=graph_units,
+                                                    validate_success=True)
+            return self.bind_templates(target_uid, zid)
+        except ZenossError as e:
+            if delete_on_fail:
+                if overwrite:
+                    logger.warn('')  # TODO: warn message, flags conflict, keeping the data.
+                elif template_uid:
+                    # If we don't have a template UID, then nothing happened, so nothing to delete.
+                    self.delete_template(template_uid)
+            raise e
 
     def bind_templates(self, uid, template_uids):
         """
@@ -641,8 +711,77 @@ def main():
     fin.close()
     zap = ZenossAPI(credentials)
 
-    zap.add_new_snmp_monitor('UptimeAUTO', '/zport/dmd/Devices/Server/Linux', oid='1.3.6.1.2.1.25.1.1.0',
-                             threshold_max=730, graph_max_y=735, graph_units='Days', RPN='8640000,/', overwrite=True)
+    # zap.add_template('AlastairUptime', '/zport/dmd/Devices/Server/Linux')
+    # zap.get_data_source_types()
+    # zap.add_data_source('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime', 'AlastairUptimeDS2')
+    # zap.set_template_info('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime/datasources/AlastairUptimeDS', **{'oid':'1.3.6.1.2.1.25.1.1.0'})
+    # zap.get_template_info('/zport/dmd/Devices/Server/Linux/rrdTemplates/SystemUptime/datasources/uptime')
+    # zap.get_data_source_details('/zport/dmd/Devices/Server/Linux/rrdTemplates/SystemUptime')  # ???
+
+    # zap.get_data_sources('/zport/dmd/Devices/Server/Linux/rrdTemplates/Device/datasources/SystemUptime')
+    # |_  /zport/dmd/Devices/Server/Linux/rrdTemplates/SystemUptime/datasources/uptime
+    # zap.get_data_source_details('/zport/dmd/Devices/Server/Linux/rrdTemplates/SystemUptime/datasources/uptime')
+    # zap.get_data_source_details('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime/datasources/AlastairUptimeDS')
+
+    # zap.get_data_sources('/zport/dmd/Devices/Server/Linux/rrdTemplates/Device/datasources/AlastairUptime')
+
+    # zap.add_threshold('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime', C.API_THRESHOLD_MIN_MAX,
+    #                   '2_YEAR_UPTIME',
+    #                   ['/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime/datasources/AlastairUptimeDS/datapoints/AlastairUptimeDS'])
+    # zap.add_graph_definition('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime',
+    #                          'AUptime')
+    # zap.add_data_point_to_graph('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime/datasources/AlastairUptimeDS/datapoints/AlastairUptimeDS',
+    #                             '/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime/graphDefs/AUptime', include_thresholds=True)
+    # zap.set_template_info(
+    #      '/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime/graphDefs/AUptime/graphPoints/AlastairUptimeDS',
+    #      **{C.API_LINE_TYPE: C.API_LINE_TYPE_LINE, C.API_RPN: '8640000,/'})
+    # zap.set_graph_definition('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime/graphDefs/AUptime',
+    #                          miny=0, maxy=730, units='Days')
+    #
+    # zap.bind_or_unbind_template('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws01.postdirect.com',
+    #                             '/zport/dmd/Devices/Server/Linux/rrdTemplates/SystemUptime')
+
+    # zap.get_device_info('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime')
+
+    # zap.add_local_template('/zport/dmd/Devices/Server/Linux/',
+    #                        '/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime')
+    # zap.get_local_templates('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws01.postdirect.com')
+    # zap.set_bound_templates('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws01.postdirect.com',
+    #                         ['Device', 'SystemUptime', 'AlastairUptime'])
+
+    # for tid in ['/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptime',
+    #             '/zport/dmd/Devices/Server/Linux/rrdTemplates/SystemUptime']:
+    #     zap.bind_or_unbind_template('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws01.postdirect.com', tid)
+    #     zap.bind_or_unbind_template('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws02.postdirect.com', tid)
+    zap.bind_templates('/zport/dmd/Devices/Server/Linux/devices/etestv-joshui01.postdirect.com', 'AlastairUptimeAUTO')
+
+    # zap.get_bound_templates('/zport/dmd/Devices/Server/Linux')
+    # print zap.bind_templates('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws01.postdirect.com', ['AlastairUptime', 'SystemUptime', 'AlastairUptimeAUTO'])
+    # zap.get_bound_templates('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws02.postdirect.com')
+    #
+    # zap.add_new_snmp_monitor('AlastairUptimeAUTO', '/zport/dmd/Devices/Server/Linux', oid='1.3.6.1.2.1.25.1.1.0',
+    #                          threshold_max=730, graph_max_y=735, graph_units='Days', RPN='8640000,/', overwrite=True)
+    # zap.get_data_sources('/zport/dmd/Devices/Network/BIG-IP/rrdTemplates/BigIpDevice')
+    # zap.get_data_points('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptimeAUTO')
+    # zap.get_thresholds('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptimeAUTO')
+    # zap.get_graphs('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptimeAUTO')
+    # zap.get_data_points('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptimeAUTO')
+    # zap.get_graph_definition('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptimeAUTO/graphDefs/AlastairUptimeAUTO_graphDefs')
+    # zap.get_data_point_details('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptimeAUTO/datasources/AlastairUptimeAUTO_datasources/datapoints/AlastairUptimeAUTO_datasources')
+    # zap.get_data_source_details('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptimeAUTO/datasources/AlastairUptimeAUTO_datasources')
+    # zap.get_graph_points('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptimeAUTO/graphDefs/AlastairUptimeAUTO_graphDefs')
+    # zap.delete_template('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptimeAUTO')
+
+
+
+    # getDataPoints:
+    # '/zport/dmd/Devices/Server/Linux/rrdTemplates/Device/datasources/SystemUptime'
+
+    # zap.get_templates()
+    # zap.add_linux_host('etestv-joshui02.postdirect.com', **{C.API_SNMP_COMMUNITY: 'qyjy8aka'})
+    # zap.add_linux_host('etestv-ald')
+    # zap.add_linux_host('eprov-legacyws02.postdirect.com')
+    # zap.get_templates('/zport/dmd/Devices/Server/Linux/rrdTemplates')
 
 if __name__ == "__main__":
     main()
