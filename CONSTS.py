@@ -30,6 +30,10 @@ class C(object):
 
     ERROR_API_S_UNSUCCESSFUL_GOT_S = None
     ERROR_VALUES_S_NO_MATCH_S = None
+    ERROR_S_OBJECT_NO_ATTRIBUTE_S = None
+    ERROR_GENERIC_UNKNOWN_EXCEPTION_S_S_S_S = None
+
+    WARN_S_AND_S_CONFLICT = None
 
     API_URI = None
     API_ENDPOINT = None
@@ -93,6 +97,7 @@ class C(object):
     API_MAX_VAL = None
     API_MIN_VAL = None
     API_NODE_CONFIG = None
+    API_MSG = None
 
     # Production States
     PRODUCTION_STATE_PRODUCTION = None
@@ -308,6 +313,11 @@ C.ERROR_EXPECTED_S_GOT_S = 'Expected type %s. Got type %s.'
 
 C.ERROR_API_S_UNSUCCESSFUL_GOT_S = 'API call returned with "successful" state of %s.'
 C.ERROR_VALUES_S_NO_MATCH_S = 'Values %s had no match in key %s.'
+C.ERROR_S_OBJECT_NO_ATTRIBUTE_S = '%s object had no attribute %s'
+C.ERROR_GENERIC_UNKNOWN_EXCEPTION_S_S_S_S = 'An unknown exception occurred while making an API call to host %s.'\
+                                      'Endpoint: %s -- Action: %s -- Method: %s'
+
+C.WARN_S_AND_S_CONFLICT = 'Function arguments %s and %s conflict. Preserving data.'
 
 C.API_URI = 'https://{HOST}'.format(HOST=C.API_URI_HOST+C.API_URI_DOMAIN)
 C.API_ENDPOINT = '/zport/dmd'
@@ -371,6 +381,7 @@ C.API_SUCCESS = 'success'
 C.API_MAX_VAL = 'maxval'
 C.API_MIN_VAL = 'minval'
 C.API_NODE_CONFIG = 'nodeConfig'
+C.API_MSG = 'msg'
 
 # Production States
 # TODO: Maybe: Move this up into the override-able section.

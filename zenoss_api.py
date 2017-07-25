@@ -63,7 +63,7 @@ class ZenossAPI(object):
         try:
             return json.loads(text)
         except ValueError as e:
-            # TODO: log the error, exception, raise e
+            # TODO: log the error
             if raise_exception:
                 raise e
 
@@ -79,13 +79,13 @@ class ZenossAPI(object):
         if C.API_RESULT in json_obj:
             if C.API_SUCCESS in json_obj[C.API_RESULT]:
                 if raise_exception and not json_obj[C.API_RESULT][C.API_SUCCESS]:
-                    raise ZenossError()  # TODO: Error message
+                    raise ZenossError(C.ERROR_API_S_UNSUCCESSFUL_GOT_S % json_obj[C.API_RESULT][C.API_SUCCESS])
 
                 if data_key in json_obj[C.API_RESULT]:
                     return json_obj[C.API_RESULT][data_key], json_obj[C.API_RESULT][C.API_SUCCESS]
                 return None, json_obj[C.API_RESULT][C.API_SUCCESS]
         elif raise_exception:
-            raise ZenossError()  # TODO: Error message
+            raise ZenossError(C.ERROR_S_OBJECT_NO_ATTRIBUTE_S % (type(json_obj), C.API_RESULT))
         return None, None
 
     def api_request(self, endpoint, action, method, data=[{}], headers=C.HEADER_JSON, raise_json_exception=False,
@@ -102,7 +102,6 @@ class ZenossAPI(object):
                  When zenoss responds with any other status code, a tuple (status_code, raw_text)
         """
         # TODO: Look at content-type in header to see if we got json back. Throw exception if HTML.
-        # TODO: take the parameter 'fail' and pass it forward to _load_json -- use the value here to log
 
         uri = C.API_URI+C.API_ENDPOINT+endpoint
         payload = {C.API_ACTION: action, C.API_METHOD: method, C.API_DATA: data if isinstance(data, list) else [data],
@@ -124,7 +123,12 @@ class ZenossAPI(object):
                 if validate_success and C.API_RESULT in results and C.API_SUCCESS in results[C.API_RESULT]:
                     if results[C.API_RESULT][C.API_SUCCESS]:
                         return results
-                    raise ZenossError('')  # TODO: error message from API.
+
+                    error_message = C.ERROR_GENERIC_UNKNOWN_EXCEPTION_S_S_S_S % (C.API_URI, endpoint, action, method)
+                    if C.API_RESULT in results and C.API_MSG in results[C.API_RESULT]:
+                        error_message = results[C.API_RESULT][C.API_MSG]
+
+                    raise ZenossError(error_message)
                 return results
             else:
                 return r.status_code, r.text
@@ -191,13 +195,7 @@ class ZenossAPI(object):
         :param validate_success:
         :return:
         """
-        # TODO: Should we be using self._non_str_iterable() here?
-        if isinstance(keys, str):
-            raise ZenossError()  # TODO: error string
-        elif isinstance(keys, Iterable):
-            keys = list(keys)
-        else:
-            keys = None
+        keys = self._non_str_iterable(keys)
         payload = [{C.API_UID: uid, C.API_KEYS: keys}]
         return self.api_request(C.API_ROUTER_DEVICE_ENDPOINT, C.API_ACTION_DEVICE_ROUTER,
                                 C.API_METHOD_GET_INFO, data=payload, validate_success=validate_success)
@@ -664,7 +662,7 @@ class ZenossAPI(object):
         except ZenossError as e:
             if delete_on_fail:
                 if overwrite:
-                    logger.warn('')  # TODO: warn message, flags conflict, keeping the data.
+                    logger.warn(C.WARN_S_AND_S_CONFLICT % ('delete_on_fail', 'overwrite'))
                 elif template_uid:
                     # If we don't have a template UID, then nothing happened, so nothing to delete.
                     self.delete_template(template_uid)
@@ -705,7 +703,6 @@ class ZenossAPI(object):
 
 
 def main():
-    # TODO: error handling.
     fin = open('credentials.yaml', 'r')
     credentials = yaml.load(fin.read())
     fin.close()
@@ -753,8 +750,9 @@ def main():
     #             '/zport/dmd/Devices/Server/Linux/rrdTemplates/SystemUptime']:
     #     zap.bind_or_unbind_template('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws01.postdirect.com', tid)
     #     zap.bind_or_unbind_template('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws02.postdirect.com', tid)
-    zap.bind_templates('/zport/dmd/Devices/Server/Linux/devices/etestv-joshui01.postdirect.com', 'AlastairUptimeAUTO')
+    # zap.bind_templates('/zport/dmd/Devices/Server/Linux/devices/etestv-joshui01.postdirect.com', 'AlastairUptimeAUTO')
 
+    zap.bind_or_unbind_template('jfksdlafjlds', 'jfkdsalfjlasd', validate_success=True)
     # zap.get_bound_templates('/zport/dmd/Devices/Server/Linux')
     # print zap.bind_templates('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws01.postdirect.com', ['AlastairUptime', 'SystemUptime', 'AlastairUptimeAUTO'])
     # zap.get_bound_templates('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws02.postdirect.com')
