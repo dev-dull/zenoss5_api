@@ -1,4 +1,3 @@
-API_URI_DOMAIN: # domain of your network with a leading '.' -- leave blank if not required for your network.
 API_URI_HOST: # Hostname or IP of your Zenoss 5 host
 SSL_VERIFY: false # Leave 'false' if your zenoss host uses a self-signed SSL certificate.
 SNMP_COMMUNITY: # Your SNMP Community string. Leave blank or omit if not needed.

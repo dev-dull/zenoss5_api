@@ -3,8 +3,12 @@ import yaml
 import socket
 import logging
 import requests
-from CONSTS import C
 from collections import Iterable
+
+try:
+    from zenoss_api.CONSTS import C
+except ImportError:
+    from CONSTS import C
 
 # TODO: just logging.getLogger() since this is a re-usable class.
 formatter = logging.Formatter(fmt='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
@@ -20,10 +24,11 @@ class ZenossError(Exception):
 
 
 class ZenossAPI(object):
-    def __init__(self, credentials, host=C.API_URI_HOST):
+    def __init__(self, credentials, host=C.API_URI_HOST, ssl_verify=C.SSL_VERIFY):
         self.credentials = self._credentials_check(credentials)
         self.host = self._host_check(host)
-        self.tid = 0
+        self.tid = self._generate_transaction_id()
+        self.ssl_verify = ssl_verify
 
     def _host_check(self, host):
         try:
@@ -31,18 +36,20 @@ class ZenossAPI(object):
         except socket.gaierror:
             raise ZenossError(C.ERROR_INVALID_HOSTNAME_GOT_S % host)
 
-        return host
+        return C.API_URI_FORMAT.format(HOST=host)
 
     def _credentials_check(self, credentials):
         if isinstance(credentials, dict):
             if len(credentials) == 1:
-                credentials = (credentials.keys()[0], credentials.values()[0])
+                # Force type to be 'list' for python3 compatibility
+                credentials = (list(credentials.keys())[0], list(credentials.values())[0])
             else:
                 raise ZenossError(C.ERROR_CREDENTIALS_DICT_FORMAT)
         elif isinstance(credentials, str):
             if ':' not in credentials:
                 raise ZenossError(C.ERROR_CREDENTIALS_STR_FORMAT)
-            credentials = credentials.split(':')
+            # Using splitlines to strip out any combo of \r and \n that might result from reading a file.
+            credentials = tuple(credentials.splitlines()[-1].split(':'))
         # 'str' type check MUST come before Iterable type check -- strings are iterable.
         elif isinstance(credentials, Iterable):
             if len(credentials) == 2:
@@ -88,6 +95,14 @@ class ZenossAPI(object):
             raise ZenossError(C.ERROR_S_OBJECT_NO_ATTRIBUTE_S % (type(json_obj), C.API_RESULT))
         return None, None
 
+    def _generate_transaction_id(self, start=0):
+        # TODO: If zenoss accepts strings here & logs the values, we should make the TID include the hostname.
+        # This will make changes trace-able.
+        tid = start
+        while True:
+            yield tid
+            tid += 1
+
     def api_request(self, endpoint, action, method, data=[{}], headers=C.HEADER_JSON, raise_json_exception=False,
                     validate_success=False):
         """
@@ -103,14 +118,15 @@ class ZenossAPI(object):
         """
         # TODO: Look at content-type in header to see if we got json back. Throw exception if HTML.
 
-        uri = C.API_URI+C.API_ENDPOINT+endpoint
+        uri = (self.host or C.API_URI)+C.API_ENDPOINT+endpoint
         payload = {C.API_ACTION: action, C.API_METHOD: method, C.API_DATA: data if isinstance(data, list) else [data],
-                   C.API_TID: C.API_KEYWORD_DEFAULTS[C.API_TID]}
+                   C.API_TID: next(self.tid)}
         logger.debug(json.dumps(payload, indent=2))
 
         try:
+            print(uri)
             r = requests.post(uri, auth=self.credentials, data=json.dumps(payload),
-                              headers=headers, verify=C.SSL_VERIFY)
+                              headers=headers, verify=bool(self.ssl_verify))
             logger.debug('Status code: %s' % r.status_code)
             try:
                 logger.debug('Result: %s' % json.dumps(json.loads(r.text), indent=2))
@@ -177,6 +193,35 @@ class ZenossAPI(object):
         return self.api_request(C.API_ROUTER_DEVICE_ENDPOINT, C.API_ACTION_DEVICE_ROUTER,
                                 C.API_METHOD_ADD_DEVICE, data=[payload], validate_success=validate_success)
 
+    def remove_devices(self, uids, uid, hash_check=C.API_KEYWORD_DEFAULTS[C.API_HASH_CHECK], action=C.API_DELETE,
+                       delete_events=C.API_KEYWORD_DEFAULTS[C.API_DELETE_EVENTS], validate_success=False):
+        # {"action": "DeviceRouter", "method": "removeDevices", "data": [
+        #     {"uids": ["/zport/dmd/Devices/Server/Linux/devices/etestv-joshui01.postdirect.com"], "hashcheck": 1,
+        #      "uid": "/zport/dmd/Devices/Server", "action": "delete", "deleteEvents": true}], "type": "rpc", "tid": 29}
+        payload = [{C.API_UIDS: uids,
+                    C.API_UID: uid,
+                    C.API_HASH_CHECK: hash_check,
+                    C.API_ACTION: action,
+                    C.API_DELETE_EVENTS: delete_events}]
+        return self.api_request(C.API_ROUTER_DEVICE_ENDPOINT, C.API_ACTION_DEVICE_ROUTER, C.API_METHOD_REMOVE_DEVICES,
+                                data=payload, validate_success=validate_success)
+
+    def add_device_class_node(self, zid, context_uid, description=C.API_KEYWORD_DEFAULTS[C.API_DESCRIPTION],
+                              connection_info=C.API_KEYWORD_DEFAULTS[C.API_CONNECTION_INFO],
+                              ztype=C.API_KEYWORD_DEFAULTS[C.API_TYPE], validate_success=False):
+        # {"action": "DeviceRouter", "method": "addDeviceClassNode", "data": [
+        #     {"id": "TerraformBuilt", "description": "", "connectionInfo": [], "type": "organizer",
+        #      "contextUid": "/zport/dmd/Devices/Server/Linux"}], "type": "rpc", "tid": 15}
+        payload = [{
+            C.API_ID: zid,
+            C.API_DESCRIPTION: description,
+            C.API_CONNECTION_INFO: connection_info,
+            C.API_TYPE: ztype,
+            C.API_CONTEXT_UID: context_uid
+        }]
+        return self.api_request(C.API_ROUTER_DEVICE_ENDPOINT, C.API_ACTION_DEVICE_ROUTER, C.API_METHOD_ADD_DEVICE_CLASS,
+                                data=payload, validate_success=validate_success)
+
     def bind_or_unbind_template(self, uid, template_uid, validate_success=False):
         """
         :param uid:
@@ -199,6 +244,16 @@ class ZenossAPI(object):
         payload = [{C.API_UID: uid, C.API_KEYS: keys}]
         return self.api_request(C.API_ROUTER_DEVICE_ENDPOINT, C.API_ACTION_DEVICE_ROUTER,
                                 C.API_METHOD_GET_INFO, data=payload, validate_success=validate_success)
+
+    def get_tree(self, zid, validate_success=False):
+        """
+        :param zid:
+        :param validate_success:
+        :return:
+        """
+        payload = [{C.API_ID: zid}]
+        return self.api_request(C.API_ROUTER_DEVICE_ENDPOINT, C.API_ACTION_DEVICE_ROUTER, C.API_METHOD_GET_TREE,
+                                data=payload, validate_success=validate_success)
 
     def get_bound_templates(self, uid, validate_success=False):
         """
@@ -263,6 +318,20 @@ class ZenossAPI(object):
         payload = [{C.API_UID: uid, C.API_TEMPLATE_IDS: self._non_str_iterable(template_ids)}]
         return self.api_request(C.API_ROUTER_DEVICE_ENDPOINT, C.API_ACTION_DEVICE_ROUTER,
                                 C.API_METHOD_SET_BOUND_TEMPLATES, data=payload, validate_success=validate_success)
+
+    def set_device_info(self, validate_success=False, **kwargs):
+        """
+        :param validate_success:
+        :param kwargs:
+        :return:
+        """
+        # {"action": "DeviceRouter", "method": "setInfo", "data":
+        # [{"uid": "/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws01.postdirect.com",
+        # "productionState": 1000}], "type": "rpc", "tid": 36}
+        payload = [kwargs]
+        return self.api_request(C.API_ROUTER_DEVICE_ENDPOINT, C.API_ACTION_DEVICE_ROUTER, C.API_METHOD_SET_INFO,
+                                data=payload, validate_success=validate_success)
+
 
     ####################################################################################################################
     #  TEMPLATE functions
@@ -559,7 +628,7 @@ class ZenossAPI(object):
     def _payload_filter(self, d):
         # Zenoss alerting behavior is sometimes conditional on what is and is not set. This filter prevents us from
         # setting values that have a blank value.
-        return dict(filter(lambda (x, v): v is not None, d.items()))
+        return dict(filter(lambda v: v is not None, d.values()))
 
     def _path_validator(self, data, key, checks, values):
         for d in data:
@@ -577,10 +646,9 @@ class ZenossAPI(object):
         else:
             raise ZenossError(C.ERROR_VALUES_S_NO_MATCH_S % (values.values(), key))
 
-    def add_new_snmp_monitor(self, zid, target_uid, oid='', threshold_max=None, threshold_min=None,
-                             template_type=C.API_TEMPLATE_TYPE_RRD_TEMPLATES, graph=True, graph_min_y=-1,
-                             graph_max_y=-1, graph_units='', graph_line_type=C.API_LINE_TYPE_LINE, RPN=None,
-                             overwrite=False, delete_on_fail=True):
+    def add_new_snmp_monitor(self, zid, target_uid, oid='', threshold_max=None, threshold_min=None,  graph=True,
+                             graph_min_y=-1, graph_max_y=-1, graph_units='', graph_line_type=C.API_LINE_TYPE_LINE,
+                             rpn=None, overwrite=False, delete_on_fail=True):
 
         # declare that this is a thing so if we fail immediately, the 'except' statement doesn't blow up.
         template_uid = ''
@@ -591,7 +659,7 @@ class ZenossAPI(object):
                 results = self.get_templates(C.API_ENDPOINT+C.API_DEVICES)
                 # TODO: is this REALLY any better? (see commit ID 7da529ce79c496f3170664503b3e52bfb362e6d9 - lines 535-538)
                 try:
-                    if self._path_validator(results[C.API_RESULT], True, C.API_ID, {0: '__eq__'}, {0: zid}):
+                    if self._path_validator(results[C.API_RESULT], C.API_ID, {0: '__eq__'}, {0: zid}):
                         # It exists and we don't want to overwrite it.
                         return True
                 except ZenossError:
@@ -653,11 +721,11 @@ class ZenossAPI(object):
                 graph_point_datasource_uid = self._path_validator(data, C.API_UID, {-2: '__eq__', -1: 'endswith'},
                                                                   {-2: C.API_PATH_PART_GRAPH_POINTS, -1: datasource_name})
 
-                payload = self._payload_filter({C.API_LINE_TYPE: graph_line_type, C.API_RPN: RPN})  # example RPN '8640000,/'
+                payload = self._payload_filter({C.API_LINE_TYPE: graph_line_type, C.API_RPN: rpn})  # example RPN '8640000,/'
                 if payload:
                     self.set_template_info(graph_point_datasource_uid, validate_success=True, **payload)
-                results = self.set_graph_definition(graph_uid, miny=graph_min_y, maxy=graph_max_y, units=graph_units,
-                                                    validate_success=True)
+                self.set_graph_definition(graph_uid, miny=graph_min_y, maxy=graph_max_y, units=graph_units,
+                                          validate_success=True)
             return self.bind_templates(target_uid, zid)
         except ZenossError as e:
             if delete_on_fail:
@@ -698,8 +766,49 @@ class ZenossAPI(object):
         """
         return self.add_device(hostname, C.API_DEVICE_CLASS_SERVER_LINUX, **kwargs)
 
+    def add_linux_hosts(self, hostnames, **kwargs):
+        """
+        :param hostnames:
+        :param kwargs:
+        :return:
+        """
+        for hostname in hostnames:
+            return self.add_linux_host(hostname, **kwargs)
 
+    def remove_linux_host(self, hostname):
+        """
+        :param hostname:
+        :return:
+        """
+        return self.remove_linux_hosts([hostname])
 
+    def remove_linux_hosts(self, hostnames):
+        """
+        :param hostnames:
+        :return:
+        """
+        uids = ['%s/%s' % (C.API_DEVICES_SERVER_LINUX_DEVICES, h) for h in hostnames]
+        return self.remove_devices(uids, C.API_DEVICES_SERVER)
+
+    def add_linux_device_class_node(self, zid, description=C.API_KEYWORD_DEFAULTS[C.API_DESCRIPTION],
+                                    connection_info=C.API_KEYWORD_DEFAULTS[C.API_CONNECTION_INFO],
+                                    ztype=C.API_KEYWORD_DEFAULTS[C.API_TYPE], validate_success=False):
+        # {"action": "DeviceRouter", "method": "addDeviceClassNode", "data": [
+        #     {"id": "TerraformBuilt", "description": "", "connectionInfo": [], "type": "organizer",
+        #      "contextUid": "/zport/dmd/Devices/Server/Linux"}], "type": "rpc", "tid": 15}
+        return self.add_device_class_node(zid, C.API_DEVICES_SERVER_LINUX, description=description,
+                                          connection_info=connection_info, ztype=ztype,
+                                          validate_success=validate_success)
+
+    def set_production_level(self, uid, production_state, validate_success=False):
+        """
+        :param uid:
+        :param production_state:
+        :param validate_success:
+        :return:
+        """
+        kwargs = {C.API_UID: uid, C.API_PRODUCTION_STATE: production_state}
+        return self.set_device_info(validate_success=validate_success, **kwargs)
 
 
 def main():
@@ -752,13 +861,17 @@ def main():
     #     zap.bind_or_unbind_template('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws02.postdirect.com', tid)
     # zap.bind_templates('/zport/dmd/Devices/Server/Linux/devices/etestv-joshui01.postdirect.com', 'AlastairUptimeAUTO')
 
-    zap.bind_or_unbind_template('jfksdlafjlds', 'jfkdsalfjlasd', validate_success=True)
+    # zap.bind_or_unbind_template('jfksdlafjlds', 'jfkdsalfjlasd', validate_success=True)
+    # zap.set_production_level('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws01.postdirect.com', C.API_PRODUCTION_STATE_PRODUCTION)
+
     # zap.get_bound_templates('/zport/dmd/Devices/Server/Linux')
     # print zap.bind_templates('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws01.postdirect.com', ['AlastairUptime', 'SystemUptime', 'AlastairUptimeAUTO'])
     # zap.get_bound_templates('/zport/dmd/Devices/Server/Linux/devices/eprov-legacyws02.postdirect.com')
-    #
-    # zap.add_new_snmp_monitor('AlastairUptimeAUTO', '/zport/dmd/Devices/Server/Linux', oid='1.3.6.1.2.1.25.1.1.0',
-    #                          threshold_max=730, graph_max_y=735, graph_units='Days', RPN='8640000,/', overwrite=True)
+
+    ### THIS \/  \/  \/
+    ### zap.add_new_snmp_monitor('AlastairUptimeAUTO', '/zport/dmd/Devices/Server/Linux', oid='1.3.6.1.2.1.25.1.1.0',
+    ###                          threshold_max=730, graph_max_y=735, graph_units='Days', RPN='8640000,/', overwrite=True)
+
     # zap.get_data_sources('/zport/dmd/Devices/Network/BIG-IP/rrdTemplates/BigIpDevice')
     # zap.get_data_points('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptimeAUTO')
     # zap.get_thresholds('/zport/dmd/Devices/Server/Linux/rrdTemplates/AlastairUptimeAUTO')
@@ -776,10 +889,28 @@ def main():
     # '/zport/dmd/Devices/Server/Linux/rrdTemplates/Device/datasources/SystemUptime'
 
     # zap.get_templates()
-    # zap.add_linux_host('etestv-joshui02.postdirect.com', **{C.API_SNMP_COMMUNITY: 'qyjy8aka'})
-    # zap.add_linux_host('etestv-ald')
+    # zap.add_linux_host('etestv-ald.postdirect.com', **{C.API_SNMP_COMMUNITY: 'qyjy8aka'})
+    # zap.remove_devices(['/zport/dmd/Devices/Server/Linux/devices/etestv-ald.postdirect.com'],
+    #                    '/zport/dmd/Devices/Server')
+    # zap.remove_linux_host('etestv-joshui01.postdirect.com')
+    # {"action": "DeviceRouter", "method": "removeDevices", "data": [
+    #     {"uids": ["/zport/dmd/Devices/Server/Linux/devices/etestv-joshui01.postdirect.com"], "hashcheck": 1,
+    #      "uid": "/zport/dmd/Devices/Server", "action": "delete", "deleteEvents": true}], "type": "rpc", "tid": 29}
+
+    # zap.add_linux_device_class_node('TerraformBuilt/ThisIsATest')
+    # zap.add_device_class_node('Testing', C.API_DEVICES_SERVER_LINUX+'/TerraformBuilt')
+    #zap.get_tree(C.API_DEVICES_SERVER_LINUX)
+
+    # {"action": "DeviceRouter", "method": "addDeviceClassNode", "data": [
+    #     {"id": "TerraformBuilt", "description": "", "connectionInfo": [], "type": "organizer",
+    #      "contextUid": "/zport/dmd/Devices/Server/Linux"}], "type": "rpc", "tid": 15}
+
+
+    # zap.add_linux_host('etestv-ald.postdirect.com')
     # zap.add_linux_host('eprov-legacyws02.postdirect.com')
     # zap.get_templates('/zport/dmd/Devices/Server/Linux/rrdTemplates')
+
+    zap.add_device('etestv-ald.postdirect.com', C.API_DEVICE_CLASS_SERVER_LINUX + '/TerraformBuilt' + '/VMWARE_TEST')
 
 if __name__ == "__main__":
     main()

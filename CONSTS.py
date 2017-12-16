@@ -8,8 +8,7 @@ class C(object):
     # Only put values here that can be overridden in zenoss_defaults.yaml
     #
     ##########################################################################
-    API_URI_HOST = 'localhost'
-    API_URI_DOMAIN = 'localdomain'
+    API_URI_HOST = 'localhost.localdomain'
     SSL_VERIFY = True
 
     # special-cases: Allow the user to override, but default is in the API_KEYWORD_DEFAULTS
@@ -36,6 +35,7 @@ class C(object):
     WARN_S_AND_S_CONFLICT = None
 
     API_URI = None
+    API_URI_FORMAT = None
     API_ENDPOINT = None
     API_DEVICES = None
 
@@ -68,6 +68,7 @@ class C(object):
     API_NAME = None
     API_TYPE = None
     API_UID = None
+    API_UIDS = None
     API_DATA_SOURCE_UID = None
     API_NODE_TYPE = None
     API_OID = None
@@ -98,13 +99,19 @@ class C(object):
     API_MIN_VAL = None
     API_NODE_CONFIG = None
     API_MSG = None
+    API_HASH_CHECK = None
+    API_DELETE_EVENTS = None
+    API_DELETE = None
+    API_DESCRIPTION = None
+    API_CONNECTION_INFO = None
+    API_CONTEXT_UID = None
 
     # Production States
-    PRODUCTION_STATE_PRODUCTION = None
-    PRODUCTION_STATE_PRE_PRODUCTION = None
-    PRODUCTION_STATE_TEST = None
-    PRODUCTION_STATE_MAINTENANCE = None
-    PRODUCTION_STATE_DECOMMISSIONED = None
+    API_PRODUCTION_STATE_PRODUCTION = 1000
+    API_PRODUCTION_STATE_PRE_PRODUCTION = 500
+    API_PRODUCTION_STATE_TEST = 400
+    API_PRODUCTION_STATE_MAINTENANCE = 300
+    API_PRODUCTION_STATE_DECOMMISSIONED = -1
 
     API_KEYWORD_DEFAULTS = {}
 
@@ -156,6 +163,10 @@ class C(object):
     API_DEVICE_CLASS_WEB_SUGARCRM = None
     API_DEVICE_CLASS_WEB_WEB_TRANSACTIONS = None
 
+    API_DEVICES_SERVER = None
+    API_DEVICES_SERVER_LINUX = None
+    API_DEVICES_SERVER_LINUX_DEVICES = None
+
     # API Template types:
     API_TEMPLATE_TYPE_RRD_TEMPLATES = None
 
@@ -182,6 +193,7 @@ class C(object):
     # - Devices
     API_METHOD_GET_DEVICES = None
     API_METHOD_ADD_DEVICE = None
+    API_METHOD_REMOVE_DEVICES = None
     API_METHOD_BIND_OR_UNBIND_TEMPLATE = None
     API_METHOD_GET_BOUND_TEMPLATES = None
     API_METHOD_GET_UNBOUND_TEMPLATES = None
@@ -189,6 +201,8 @@ class C(object):
     API_METHOD_REMOVE_LOCAL_TEMPLATE = None
     API_METHOD_GET_LOCAL_TEMPLATES = None
     API_METHOD_SET_BOUND_TEMPLATES = None
+    API_METHOD_ADD_DEVICE_CLASS = None
+    API_METHOD_GET_TREE = None
     # - Templates
     API_METHOD_ADD_TEMPLATE = None
     API_METHOD_GET_TEMPLATES = None
@@ -319,7 +333,8 @@ C.ERROR_GENERIC_UNKNOWN_EXCEPTION_S_S_S_S = 'An unknown exception occurred while
 
 C.WARN_S_AND_S_CONFLICT = 'Function arguments %s and %s conflict. Preserving data.'
 
-C.API_URI = 'https://{HOST}'.format(HOST=C.API_URI_HOST+C.API_URI_DOMAIN)
+C.API_URI_FORMAT = 'https://{HOST}'
+C.API_URI = C.API_URI_FORMAT.format(HOST=C.API_URI_HOST)
 C.API_ENDPOINT = '/zport/dmd'
 C.API_DEVICES = '/Devices'
 
@@ -352,6 +367,7 @@ C.API_TEMPLATE_UID = 'templateUid'
 C.API_NAME = 'name'
 C.API_TYPE = 'type'
 C.API_UID = 'uid'
+C.API_UIDS = 'uids'
 C.API_DATA_SOURCE_UID = 'dataSourceUid'
 C.API_NODE_TYPE = 'nodetype'
 C.API_OID = 'oid'
@@ -382,21 +398,19 @@ C.API_MAX_VAL = 'maxval'
 C.API_MIN_VAL = 'minval'
 C.API_NODE_CONFIG = 'nodeConfig'
 C.API_MSG = 'msg'
-
-# Production States
-# TODO: Maybe: Move this up into the override-able section.
-C.PRODUCTION_STATE_PRODUCTION = 1000
-C.PRODUCTION_STATE_PRE_PRODUCTION = 500
-C.PRODUCTION_STATE_TEST = 400
-C.PRODUCTION_STATE_MAINTENANCE = 300
-C.PRODUCTION_STATE_DECOMMISSIONED = -1
+C.API_HASH_CHECK = 'hashcheck'
+C.API_DELETE_EVENTS = 'deleteEvents'
+C.API_DELETE = 'delete'
+C.API_DESCRIPTION = 'description'
+C.API_CONNECTION_INFO = 'connectionInfo'
+C.API_CONTEXT_UID = 'contextUid'
 
 C.API_KEYWORD_DEFAULTS = {
     C.API_TID: 1,
     C.API_COLLECTOR: C.ZENOSS_COLLECTOR or 'localhost',
     C.API_MODEL: True,
     C.API_TITLE: '',
-    C.API_PRODUCTION_STATE: C.PRODUCTION_STATE_PRODUCTION,
+    C.API_PRODUCTION_STATE: C.API_PRODUCTION_STATE_PRODUCTION,
     C.API_PRIORITY: 3,
     C.API_SNMP_COMMUNITY: C.SNMP_COMMUNITY or '',
     C.API_SNMP_PORT: C.SNMP_PORT or 161,
@@ -418,6 +432,11 @@ C.API_KEYWORD_DEFAULTS = {
     C.API_MINY: -1,
     C.API_MAXY: -1,
     C.API_INCLUDE_THRESHOLDS: False,
+    C.API_HASH_CHECK: 1,
+    C.API_DELETE_EVENTS: True,
+    C.API_DESCRIPTION: '',
+    C.API_CONNECTION_INFO: [],
+    C.API_TYPE: 'organizer',
 }
 
 # API Device Classes:
@@ -469,6 +488,10 @@ C.API_DEVICE_CLASS_WEB = '/Web'
 C.API_DEVICE_CLASS_WEB_SUGARCRM = '/Web/SugarCRM'
 C.API_DEVICE_CLASS_WEB_WEB_TRANSACTIONS = '/Web/WebTransactions'
 
+C.API_DEVICES_SERVER = C.API_ENDPOINT + C.API_DEVICES + 'Server'
+C.API_DEVICES_SERVER_LINUX = C.API_ENDPOINT + C.API_DEVICES + C.API_DEVICE_CLASS_SERVER_LINUX
+C.API_DEVICES_SERVER_LINUX_DEVICES = C.API_ENDPOINT + C.API_DEVICES + C.API_DEVICE_CLASS_SERVER_LINUX + '/devices'
+
 # API Template types:
 C.API_TEMPLATE_TYPE_RRD_TEMPLATES = '/rrdTemplates'
 
@@ -495,6 +518,7 @@ C.API_METHOD_SET_INFO = 'setInfo'
 # - Devices
 C.API_METHOD_GET_DEVICES = 'getDevices'
 C.API_METHOD_ADD_DEVICE = 'addDevice'
+C.API_METHOD_REMOVE_DEVICES = 'removeDevices'
 C.API_METHOD_BIND_OR_UNBIND_TEMPLATE = 'bindOrUnbindTemplate'
 C.API_METHOD_GET_BOUND_TEMPLATES = 'getBoundTemplates'
 C.API_METHOD_GET_UNBOUND_TEMPLATES = 'getUnboundTemplates'
@@ -502,6 +526,8 @@ C.API_METHOD_ADD_LOCAL_TEMPLATE = 'addLocalTemplate'
 C.API_METHOD_REMOVE_LOCAL_TEMPLATE = 'removeLocalTemplate'
 C.API_METHOD_GET_LOCAL_TEMPLATES = 'getLocalTemplates'
 C.API_METHOD_SET_BOUND_TEMPLATES = 'setBoundTemplates'
+C.API_METHOD_ADD_DEVICE_CLASS = 'addDeviceClassNode'
+C.API_METHOD_GET_TREE = 'getTree'
 # - Templates
 C.API_METHOD_ADD_TEMPLATE = 'addTemplate'
 C.API_METHOD_GET_TEMPLATES = 'getTemplates'
