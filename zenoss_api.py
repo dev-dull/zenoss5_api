@@ -6,17 +6,9 @@ import requests
 from collections import Iterable
 
 try:
-    from zenoss_api.CONSTS import C
+    from zenoss5_api.CONSTS import C
 except ImportError:
     from CONSTS import C
-
-# TODO: just logging.getLogger() since this is a re-usable class.
-formatter = logging.Formatter(fmt='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
-handler = logging.StreamHandler()
-handler.setFormatter(formatter)
-logger = logging.getLogger()
-logger.addHandler(handler)
-logger.setLevel(logging.DEBUG)
 
 
 class ZenossError(Exception):
@@ -64,7 +56,7 @@ class ZenossAPI(object):
     def _load_json(self, text, raise_exception=True):
         """
         :param: String, The raw json formatted text to turn into an object
-        :param fail: Boolean, when true raise an error if the json is incorrectly formatted.
+        :param raise_exception: Boolean, when true raise an error if the json is incorrectly formatted.
         :return: The object the json represented (e.g. list, dict, etc.)
         """
         try:
@@ -121,17 +113,16 @@ class ZenossAPI(object):
         uri = (self.host or C.API_URI)+C.API_ENDPOINT+endpoint
         payload = {C.API_ACTION: action, C.API_METHOD: method, C.API_DATA: data if isinstance(data, list) else [data],
                    C.API_TID: next(self.tid)}
-        logger.debug(json.dumps(payload, indent=2))
+        logging.debug(json.dumps(payload, indent=2))
 
         try:
-            print(uri)
             r = requests.post(uri, auth=self.credentials, data=json.dumps(payload),
                               headers=headers, verify=bool(self.ssl_verify))
-            logger.debug('Status code: %s' % r.status_code)
+            logging.debug('Status code: %s' % r.status_code)
             try:
-                logger.debug('Result: %s' % json.dumps(json.loads(r.text), indent=2))
+                logging.debug('Result: %s' % json.dumps(json.loads(r.text), indent=2))
             except ValueError:
-                logger.debug('Result: %s' % r.text)
+                logging.debug('Result: %s' % r.text)
 
             # TODO: we should be checking the status code and react+log accordingly.
             if r.status_code == 200:
@@ -730,7 +721,7 @@ class ZenossAPI(object):
         except ZenossError as e:
             if delete_on_fail:
                 if overwrite:
-                    logger.warn(C.WARN_S_AND_S_CONFLICT % ('delete_on_fail', 'overwrite'))
+                    logging.warn(C.WARN_S_AND_S_CONFLICT % ('delete_on_fail', 'overwrite'))
                 elif template_uid:
                     # If we don't have a template UID, then nothing happened, so nothing to delete.
                     self.delete_template(template_uid)
@@ -910,7 +901,8 @@ def main():
     # zap.add_linux_host('eprov-legacyws02.postdirect.com')
     # zap.get_templates('/zport/dmd/Devices/Server/Linux/rrdTemplates')
 
-    zap.add_device('etestv-ald.postdirect.com', C.API_DEVICE_CLASS_SERVER_LINUX + '/TerraformBuilt' + '/VMWARE_TEST')
+    # zap.add_device('etestv-ald.postdirect.com', C.API_DEVICE_CLASS_SERVER_LINUX + '/TerraformBuilt' + '/VMWARE_TEST')
+    zap.add_device('etestv-ald.postdirect.com', C.API_DEVICE_CLASS_SERVER_LINUX)
 
 if __name__ == "__main__":
     main()
